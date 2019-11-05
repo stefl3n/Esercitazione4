@@ -33,7 +33,7 @@ void gestore(int signo){
 /*Funzione eliminaOcc che mi restituisce il num di Occ trovate ed elimina le occorenze riscrivendo direttamente
  * sul file *********/
 
-int eliminaOcc(int fd, char* parola);{
+int eliminaOcc(int fd, char* parola){
 	int len=strlen(parola);
 	int i=0, j=0, result=0, check=0, occ=0;
 	char c, buf[256];
@@ -47,7 +47,7 @@ int eliminaOcc(int fd, char* parola);{
 				lseek(fd,-len,SEEK_CUR);
 			}
 		}else{
-			lseek(fd,-1,SEEK_CUR)
+			lseek(fd,-1,SEEK_CUR);
 			if(i>0){
 				i++;
 				lseek(fd,-i,SEEK_CUR)
@@ -70,7 +70,28 @@ int eliminaOcc(int fd, char* parola);{
 
 /* Funzione che mi invia tutti i nomi dei file delle sotto directory al cliente in caso di errore mi ritorna -2 --------*/
 int mandaNomiFile(int connsd, DIR* dir){
-	
+	struct dirent * dire;
+    DIR * indir;
+    errno=0;//readdir restituisce null anche in caso di errore, unico modo per verificare
+    //successo e' settare errno e vedere se rimane a 0 (da manuale). Oppure si fa finta che vada tutto bene sempre
+    
+    while((dire=readdir(dir)) != NULL){//lettura dir 
+        
+        //d_type della struct dirent non e' standardizzato. Io lo uso comunque :) 
+        //DT_DIR      This is a directory.
+        if(dire->d_type==DT_DIR){//se sotto-directory la ciclo
+            indir=opendir(dire->d_name);
+            if(indir == NULL) return (-2);
+            
+            while((dire=readdir(indir)) != NULL){
+                if(dire->d_type == DT_REG) write(connsd,dire->d_name,strlen(dire->d_name)+1);
+            }
+            
+            if(errno != 0) return (-2);
+        }
+    }
+    
+    if(errno!=0) return (-2);
 }
 
 
