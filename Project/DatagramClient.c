@@ -10,8 +10,7 @@
 #include <netdb.h>
 #include <string.h>
 #include <sys/select.h>
-
-
+#define true 1
 
 /*Struttura di una richiesta*/
 /********************************************************/
@@ -27,7 +26,7 @@ int main(int argc, char **argv){
 	
 	struct hostent *host;
 	struct sockaddr_in clientaddr, servaddr;
-	int  port, sd, num1, num2, len, ris, ok;
+	int  port, sd, num1, len, ris;
 	char namef[256], occ[256];
 	Request* req =(Request*)malloc(sizeof(Request));
 	
@@ -96,14 +95,9 @@ int main(int argc, char **argv){
 		/*Chiedo i dati da inviare al server---------------*/
 		
 		printf("Scrivi il nome del file e premi invio\n");
-		scanf("%s",namef);
+		scanf("%s",req->nomefile);
 		printf("Scrivi la parola da elminare e premi invio\n");
-		scanf("%s",occ);
-		
-		/*Popolo la mia struttura Request-------------*/
-		
-		strcpy(req->nomefile,namef);
-		strcpy(req->parola,occ);
+		scanf("%s",req->parola);
 		
 		/*Invio la mia Request al server-------------*/
 		

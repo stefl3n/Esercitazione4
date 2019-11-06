@@ -1,17 +1,20 @@
-
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <string.h>
 #include <sys/select.h>
 #include <dirent.h>
+#define true 1
+
 /*Struttura di una richiesta*/
 /********************************************************/
 typedef struct{
@@ -33,30 +36,33 @@ void gestore(int signo){
 /*Funzione eliminaOcc che mi restituisce il num di Occ trovate ed elimina le occorenze riscrivendo direttamente
  * sul file *********/
 
-int eliminaOcc(int fd, char* parola){
-	int len=strlen(parola);
-	int i=0, j=0, result=0, check=0, occ=0;
+int eliminaOcc(int fd, char *filename, char* parola){
+	int fd1 = open(filename, O_WRONLY);
+	int len = strlen(parola);
+	int i=0, result=0, check=0;
 	char c, buf[256];
-	while((check=read(fd,&c,sizeof(char)))>0){
+	int len1=lseek(fd,0,SEEK_END),len2=0;
+	lseek(fd,0,SEEK_SET);
+	while(((check=read(fd,&c,sizeof(char)))>0) || (len2>=len1)){
 		if(c==parola[i]){
 			buf[i]=c;
 			i++;
 			if(len==i){
 				result++;
 				i=0;
-				lseek(fd,-len,SEEK_CUR);
 			}
 		}else{
-			lseek(fd,-1,SEEK_CUR);
 			if(i>0){
-				i++;
-				lseek(fd,-i,SEEK_CUR)
-				write(fd,buf,sizeof(char)*i);
+				write(fd1,buf,sizeof(char)*i);
+				i=0;
 			}
-			write(fd,&c,sizeof(char));
-			i=0;
+			write(fd1,&c,sizeof(char));
+			len2=lseek(fd1,0,SEEK_CUR);
+			
 		}
+		
 	}
+	close(fd1);
 	
 	/* Ho fatto in modo che se c'è stato un problema annullo tutto infatti ritorno -2
 	 * in questo modo potrò segnalare al client che qualcosa è andato storto******/
@@ -92,16 +98,12 @@ int mandaNomiFile(int connsd, DIR* dir){
     }
     
     if(errno!=0) return (-2);
+	
+	return 0;
 }
 
-
-
-
-
-
-
 int main(int argc, char **argv){
-	int udpsd, listen_sd, connsd, port, len, nready, check, check1, ris1, maxfd, fd;
+	int udpsd, listen_sd, connsd, port, len, nready, check, check1, ris1, maxfd, fd, num1;
 	fd_set fdset;
 	DIR* dir;
 	const int on = 1;
@@ -149,15 +151,15 @@ int main(int argc, char **argv){
 	{perror("creazione socket "); exit(1);}
 	printf("Server: creata la socket d'ascolto per le richieste di ordinamento, fd=%d\n", listen_sd);
 	
-	sd=socket(AF_INET, SOCK_DGRAM, 0);
-	if(sd <0){perror("creazione socket "); exit(1);}
-	printf("Server: creata la socket, sd=%d\n", sd);
+	udpsd=socket(AF_INET, SOCK_DGRAM, 0);
+	if(udpsd <0){perror("creazione socket "); exit(1);}
+	printf("Server: creata la socket, sd=%d\n", udpsd);
 
 	if(setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on))<0)
 	{perror("set opzioni socket d'ascolto"); exit(1);}
 	printf("Server: set opzioni socket d'ascolto ok\n");
 	
-	if(setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on))<0)
+	if(setsockopt(udpsd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on))<0)
 	{perror("set opzioni socket "); exit(1);}
 	printf("Server: set opzioni socket ok\n");
 
@@ -165,7 +167,7 @@ int main(int argc, char **argv){
 	{perror("bind socket d'ascolto"); exit(1);}
 	printf("Server: bind socket d'ascolto ok\n");
 	
-	if(bind(sd,(struct sockaddr *) &servaddr, sizeof(servaddr))<0)
+	if(bind(udpsd,(struct sockaddr *) &servaddr, sizeof(servaddr))<0)
 	{perror("bind socket "); exit(1);}
 	printf("Server: bind socket ok\n");
 
@@ -177,7 +179,7 @@ int main(int argc, char **argv){
 	
 	signal(SIGCHLD, gestore);
 	FD_ZERO(&fdset);
-	maxfd=max(listen_sd, udpsd)+1;
+	maxfd=(listen_sd>udpsd ? listen_sd : udpsd)+1;
 	
 	/*Entro nel ciclio e aspetto che qualcuno mi contatti -----------------------------------*/
 	
@@ -186,7 +188,7 @@ int main(int argc, char **argv){
 		FD_SET(listen_sd,&fdset);
 		FD_SET(udpsd,&fdset);
 		
-		if ((nready=select(maxfdp1, &rset, NULL, NULL, NULL))<0){
+		if ((nready=select(maxfd, &fdset, NULL, NULL, NULL))<0){
 			if(errno==EINTR) continue; 
 			else {perror("select"); exit(8);}
 		}
@@ -203,13 +205,14 @@ int main(int argc, char **argv){
 			/* Messaggio ricevuto e salvato in req1
 			 * 	Vado a controllare se esiste il file -------------*/
 			 
-			if((fd=open(req1->nomefile,O_RDWR))<0){
+			if((fd=open("fileDiMerda.txt",O_RDWR))<0){
+				perror("Maiala ");
 				
 				/*Il file non esiste -----------*/
 				
 				ris1=-1;
 				
-				if (sendto(udpsd, &ris1, sizeof(ris), 0, (struct sockaddr *)&cliaddr, len)<0)
+				if (sendto(udpsd, &ris1, sizeof(ris1), 0, (struct sockaddr *)&cliaddr, len)<0)
 				{perror("sendto"); continue;}
 		
 			}else{
@@ -217,14 +220,15 @@ int main(int argc, char **argv){
 				/*Il file esiste --------------------------
 				 * Vado ad eliminare le occorenze e salvo il dato in ris--------------*/
 				 
-				ris1=eliminaOcc(fd,req1->parola);
+				ris1=eliminaOcc(fd, "fileDiMerda.txt", "Davide");
 				
 				/*Invio il dato al client in caso di errore durante l'eliminazione di 
 				 * occorenze la funzione eliminaOcc() mi restituisce -2*/
 				 
-				if (sendto(udpsd, &ris1, sizeof(ris), 0, (struct sockaddr *)&cliaddr, len)<0)
+				if (sendto(udpsd, &ris1, sizeof(ris1), 0, (struct sockaddr *)&cliaddr, len)<0)
 				{perror("sendto"); continue;}
 			}
+			close(fd);
 			
 		} 
 		if(FD_ISSET(listen_sd,&fdset)){
@@ -285,7 +289,7 @@ int main(int argc, char **argv){
 					check=-1;
 					}
 					
-					if(check=>0){
+					if(check>=0){
 						/*Adesso ho il nome di directory vaido e vado a compiere il mio servizio
 						* Ma resto dentro al ciclio che se qualcosa va storto almeno lo notifico e mi metto in attesa
 						* 

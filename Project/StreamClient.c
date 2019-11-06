@@ -10,10 +10,11 @@
 #include <netdb.h>
 #include <string.h>
 #include <sys/select.h>
+#define true 1
 
 int main(int argc, char *argv[])
 {
-	int sd, port, fd_sorg, fd_dest, nread, i=0, j=0;
+	int sd, port, nread, i=0, j=0, check;
 	char buff[256], req[256];
 	// FILENAME_MAX: lunghezza massima nome file. Costante di sistema.
 	char c;
@@ -97,7 +98,7 @@ int main(int argc, char *argv[])
 				 /*CREDO VADANO CONTROLLATI SOLO QUESTI--------------***-*-*-*-*-*-*-*-*-*/
 				 if(c==' ' || c=='\0' || c=='\n'){
 					 for(j=0;j<=i;i++){
-						 printf(buff[j]);
+						 printf("%c",buff[j]);
 					 }
 					 /*Faccio in modo che ogni nome di file a video sia separato da \n-----------------*/
 					 
