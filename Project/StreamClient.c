@@ -64,6 +64,7 @@ int main(int argc, char *argv[])
 	* Stesso dicasi per le altre gets...
 	* Come si potrebbe risolvere il problema?
 	*/
+	sd=socket(AF_INET, SOCK_STREAM, 0);
 	while(true){
 		/*Chiedo il nome di cartella e lo salvo nella variabile req-------------*/
 		
@@ -73,7 +74,7 @@ int main(int argc, char *argv[])
 		
 		/*Creo la connessione ------------------*/    
 		
-		sd=socket(AF_INET, SOCK_STREAM, 0);
+		
 		if(sd<0) {perror("apertura socket"); exit(1);}
 		printf("Client: creata la socket sd=%d\n", sd);
 
