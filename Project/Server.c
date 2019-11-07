@@ -20,8 +20,7 @@
 typedef struct{
   char nomefile[256];
   char parola[256];
-}Request1;
- 
+}Request; 
 /*******************************************************/
 
 /*Faccio le funzioni ausiliarie ************************/
@@ -33,45 +32,51 @@ void gestore(int signo){
   wait(&stato);
 }
 
-/*Funzione eliminaOcc che mi restituisce il num di Occ trovate ed elimina le occorenze riscrivendo direttamente
- * sul file *********/
+/*Funzione eliminaOcc che mi restituisce il num di Occ trovate ed elimina le occorenze */
 
 int eliminaOcc(int fd, char *filename, char* parola){
-	int fd1 = open(filename, O_WRONLY);
-	int len = strlen(parola);
-	int i=0, result=0, check=0;
-	char c, buf[256];
-	int len1=lseek(fd,0,SEEK_END),len2=0;
-	lseek(fd,0,SEEK_SET);
-	while(((check=read(fd,&c,sizeof(char)))>0) || (len2>=len1)){
+	int len, i, result, nread, fdTemp;
+	char c, buf[256], filenameTemp[256];
+	
+	strcpy(filenameTemp, filename);
+	strcat(filenameTemp, "temp");
+	
+	if((fdTemp = creat(filenameTemp, 777))<0){
+		perror("Errore apertura file temporaneo");
+		return -2;
+	}
+	
+	len = strlen(parola);
+	result=0;
+	i=0;
+	while((nread=read(fd,&c,sizeof(char)))>0){
 		if(c==parola[i]){
-			buf[i]=c;
-			i++;
+			buf[i++]=c;
+			
 			if(len==i){
 				result++;
 				i=0;
 			}
 		}else{
-			if(i>0){
-				write(fd1,buf,sizeof(char)*i);
-				i=0;
-			}
-			write(fd1,&c,sizeof(char));
-			len2=lseek(fd1,0,SEEK_CUR);
+			if(i>0)
+				write(fdTemp,buf,sizeof(char)*i);
 			
+			write(fdTemp,&c,sizeof(char));
+			i=0;
 		}
-		
 	}
-	close(fd1);
+	close(fd);
+	close(fdTemp);
 	
 	/* Ho fatto in modo che se c'è stato un problema annullo tutto infatti ritorno -2
 	 * in questo modo potrò segnalare al client che qualcosa è andato storto******/
-	if(check<0){
+	if(nread<0){
 		printf("Sono %d qualcosa è andato storto durante la lettura del file\n",getpid());
 		result=-2;
 	}
-	return result;
+	rename(filenameTemp, filename);
 	
+	return result;
 }
 
 /* Funzione che mi invia tutti i nomi dei file delle sotto directory al cliente in caso di errore mi ritorna -2 --------*/
@@ -110,7 +115,7 @@ int main(int argc, char **argv){
 	char req2[256];
 	struct sockaddr_in cliaddr, servaddr;
 	struct hostent *clienthost;
-	Request1* req1 =(Request1*)malloc(sizeof(Request1));
+	Request* req1 =(Request *) malloc (sizeof(Request));
 	
 	
 	/* CONTROLLO ARGOMENTI ---------------------------------- */
@@ -181,7 +186,7 @@ int main(int argc, char **argv){
 	FD_ZERO(&fdset);
 	maxfd=(listen_sd>udpsd ? listen_sd : udpsd)+1;
 	
-	/*Entro nel ciclio e aspetto che qualcuno mi contatti -----------------------------------*/
+	/*Entro nel ciclo e aspetto che qualcuno mi contatti -----------------------------------*/
 	
 	while(true){
 		
@@ -190,37 +195,37 @@ int main(int argc, char **argv){
 		
 		if ((nready=select(maxfd, &fdset, NULL, NULL, NULL))<0){
 			if(errno==EINTR) continue; 
-			else {perror("select"); exit(8);}
+			else { perror("select"); exit(8);}
 		}
 		
 		
 		if(FD_ISSET(udpsd,&fdset)){
 			/*Gestisco servizio senza connessione------*/
 			
-			len=sizeof(struct sockaddr_in);
+			len=sizeof(struct sockaddr);
 			
-			if (recvfrom(udpsd, req1, sizeof(Request1), 0, (struct sockaddr *)&cliaddr, &len)<0)
-				{perror("recvfrom"); continue;}
-				
+			if (recvfrom(udpsd, req1, sizeof(Request), 0, (struct sockaddr *)&cliaddr, &len)<0){
+				perror("recvfrom");
+				continue;
+			}
+			printf("%s %s\n", req1->nomefile, req1->parola);	
 			/* Messaggio ricevuto e salvato in req1
 			 * 	Vado a controllare se esiste il file -------------*/
 			 
-			if((fd=open("fileDiMerda.txt",O_RDWR))<0){
+			if((fd=open(req1->nomefile,O_RDONLY))<0){
 				perror("Maiala ");
 				
 				/*Il file non esiste -----------*/
 				
 				ris1=-1;
-				
 				if (sendto(udpsd, &ris1, sizeof(ris1), 0, (struct sockaddr *)&cliaddr, len)<0)
-				{perror("sendto"); continue;}
-		
+					{perror("sendto"); continue;}
 			}else{
 				
 				/*Il file esiste --------------------------
 				 * Vado ad eliminare le occorenze e salvo il dato in ris--------------*/
 				 
-				ris1=eliminaOcc(fd, "fileDiMerda.txt", "Davide");
+				ris1=eliminaOcc(fd, req1->nomefile, req1->parola);
 				
 				/*Invio il dato al client in caso di errore durante l'eliminazione di 
 				 * occorenze la funzione eliminaOcc() mi restituisce -2*/
@@ -228,16 +233,15 @@ int main(int argc, char **argv){
 				if (sendto(udpsd, &ris1, sizeof(ris1), 0, (struct sockaddr *)&cliaddr, len)<0)
 				{perror("sendto"); continue;}
 			}
-			close(fd);
-			
-		} 
+		}
+ 
 		if(FD_ISSET(listen_sd,&fdset)){
 			/*Gestisco servizio con connessiione-------------------*/
 			
 			/* Provo a stabilire la connessione nel padre e non nel figlio perchè 
 			 * potrebbe sucedere che due processi tentano di aprire la stessa connessione*/
 			 
-			len = sizeof(struct sockaddr_in);
+			len = sizeof(struct sockaddr);
 			
 			if((connsd = accept(listen_sd,(struct sockaddr *)&cliaddr,&len))<0){
 				if (errno==EINTR) continue;
@@ -297,10 +301,8 @@ int main(int argc, char **argv){
 						* di errore mi restituisce -2-----*/
 						check=mandaNomiFile(connsd,dir);
 					}
-				}
-				close(connsd); //chiusura del figlio
-			}
-			close(connsd); // chiusura del padre
+				}//chiusura del figlio
+			}// chiusura del padre
 		}
 	}
  }

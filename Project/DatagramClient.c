@@ -28,7 +28,7 @@ int main(int argc, char **argv){
 	struct sockaddr_in clientaddr, servaddr;
 	int  port, sd, num1, len, ris;
 	char namef[256], occ[256];
-	Request* req =(Request*)malloc(sizeof(Request));
+	Request * req = (Request*) malloc (sizeof(Request));
 	
 	/* CONTROLLO ARGOMENTI ---------------------------------- */
 	if(argc!=3){
@@ -90,19 +90,18 @@ int main(int argc, char **argv){
 	printf("Client: bind socket ok, alla porta %i\n", clientaddr.sin_port);
 
 	/* CORPO DEL CLIENT: ciclo di accettazione di richieste da utente */
-	// Ciclo da modificare
-	while(true){
-		/*Chiedo i dati da inviare al server---------------*/
+	
+	printf("Scrivi il nome del file e premi invio\n");
+	
+	while((scanf("%s", req->nomefile))!=EOF){
 		
-		printf("Scrivi il nome del file e premi invio\n");
-		scanf("%s",req->nomefile);
 		printf("Scrivi la parola da elminare e premi invio\n");
-		scanf("%s",req->parola);
+		scanf("%s", req->parola);
 		
 		/*Invio la mia Request al server-------------*/
 		
 		len=sizeof(servaddr);
-		if(sendto(sd, &req, sizeof(Request), 0, (struct sockaddr *)&servaddr, len)<0){
+		if(sendto(sd, req, sizeof(Request), 0, (struct sockaddr *)&servaddr, len)<0){
 			perror("sendto");continue;}
 		
 		/* Attendo il risultato del server--------------------*/
@@ -112,22 +111,18 @@ int main(int argc, char **argv){
 			perror("recvfrom"); continue;}
 		
 		/*Controllo il risultato dato che se è 
-		 * ==-1 vuoldire che il file non esiste
-		 * ==-2 vuoldire che c'è stato un errore in lettura del file---------*/
+		* ==-1 vuoldire che il file non esiste
+		* ==-2 vuoldire che c'è stato un errore in lettura del file---------*/
 		 
-		 if(ris>=0){
-			 printf("Il server ha risposto il numero di occorenze eliminate dal file sono %d\n",ris);
-		 }else{
-			 if(ris==-1){
-				 printf("Il server ha risposto, il nome del file che mi hai dato risulta non esistere\n");
-			 }
-			 if(ris==-2){
-				 printf("Il server ha risposto, ma ci è stato qualche problema con la lettura del file\n");
-			 }
-		 }
-		 
+		if(ris>=0){ printf("Il server ha risposto: numero di occorenze eliminate dal file sono %d\n",ris);}
+		else if(ris==-1){printf("Il server ha risposto: ERRORE file non esistente\n");}
+		else if (ris==-2){printf("Il server ha risposto: ERRORE durante l'operazione\n");}
+		
+		printf("Scrivi il nome del file e premi invio\n");
+
 	}
+	
 	close(sd);
-	printf("\nClientDataGram: termino...\n");  
+	printf("\nDatagramClient: termino...\n");  
 	exit(0);
 }
